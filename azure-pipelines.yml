@@ -52,7 +52,7 @@ stages:
               script: |
                 if (!(Test-Path "terraform")) { Write-Host "Terraform directory not found"; exit 1 }
                 cd terraform
-                terraform init 
+                terraform init
 
           # Validate Terraform Configuration
           - task: PowerShell@2
@@ -99,7 +99,7 @@ stages:
         steps:
           # Install WSL on Windows if not available
           - task: PowerShell@2
-            displayName: "Ensure WSL is Installed (Windows)"
+            displayName: "Ensure WSL is Installed and Ubuntu is Set Up"
             condition: eq(variables['Agent.OS'], 'Windows_NT')
             inputs:
               targetType: 'inline'
@@ -108,9 +108,12 @@ stages:
                 if ($wslStatus -match "Windows Subsystem for Linux has no installed distributions") {
                   Write-Host "Installing WSL and Ubuntu..."
                   wsl --install -d Ubuntu
+                  Start-Sleep -Seconds 30  # Wait for installation
                 } else {
                   Write-Host "WSL is already installed."
                 }
+                # Ensure Ubuntu is the default WSL distro
+                wsl --set-default Ubuntu
 
           # Run Ansible Playbook
           - task: PowerShell@2
@@ -118,6 +121,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                wsl ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --extra-vars "ansible_password=$(VM_PASSWORD)" --ask-pass
-            env:
-              VM_PASSWORD: $(VM_PASSWORD)
+                echo "[vm]" > ansible/inventory
+                echo "$(terraform output -raw vm_public_ip) ansible_user=azureuser ansible_password=$(VM_PASSWORD) ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory
+                wsl ansible-playbook -i ansible/inventory ansible/playbook.yml
