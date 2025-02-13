@@ -97,6 +97,13 @@ stages:
     jobs:
       - job: Ansible
         steps:
+          - task: PowerShell@2
+            displayName: "Check Available WSL Distributions"
+            inputs:
+              targetType: 'inline'
+              script: |
+                wsl --list --verbose
+
           # Install WSL on Windows if not available
           - task: PowerShell@2
             displayName: "Ensure WSL is Installed and Ubuntu is Set Up"
