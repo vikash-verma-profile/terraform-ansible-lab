@@ -27,6 +27,8 @@ stages:
                 } else {
                   Write-Host "Terraform is already installed."
                 }
+                # Ensure PATH is updated
+                $env:Path += ";C:\terraform"
 
           # Debugging: List files in the directory
           - script: |
@@ -48,6 +50,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
+                if (!(Test-Path "terraform")) { Write-Host "Terraform directory not found"; exit 1 }
                 cd terraform
                 terraform init 
 
@@ -94,19 +97,33 @@ stages:
     jobs:
       - job: Ansible
         steps:
-          - task: Bash@3
-            displayName: "Install Ansible"
+          # Install WSL on Windows if not available
+          - task: PowerShell@2
+            displayName: "Ensure WSL is Installed (Windows)"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
             inputs:
-              targetType: "inline"
+              targetType: 'inline'
               script: |
-                sudo apt update
-                sudo apt install -y ansible
+                $wslStatus = wsl --list --quiet 2>&1
+                if ($wslStatus -match "Windows Subsystem for Linux has no installed distributions") {
+                  Write-Host "Installing WSL and Ubuntu..."
+                  wsl --install -d Ubuntu
+                } else {
+                  Write-Host "WSL is already installed."
+                }
 
+          # Run Ansible Playbook
           - task: Bash@3
             displayName: "Run Ansible Playbook"
             inputs:
               targetType: "inline"
               script: |
-                ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --private-key $(SSH_PRIVATE_KEY)
+                if [[ "$AGENT_OS" == "Windows_NT" ]]; then
+                  echo "Running in Windows, using WSL for Ansible execution."
+                  wsl ansible-playbook -i "$(wsl terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --extra-vars "ansible_password=$(VM_PASSWORD)"
+                else
+                  echo "Running on Linux, executing Ansible directly."
+                  ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --extra-vars "ansible_password=$(VM_PASSWORD)"
+                fi
             env:
               ANSIBLE_HOST_KEY_CHECKING: "False"
