@@ -118,4 +118,6 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                wsl ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --private-key $(SSH_PRIVATE_KEY)
+                wsl ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --extra-vars "ansible_password=$(VM_PASSWORD)" --ask-pass
+            env:
+              VM_PASSWORD: $(VM_PASSWORD)
