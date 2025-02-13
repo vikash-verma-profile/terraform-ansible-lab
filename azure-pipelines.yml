@@ -5,86 +5,92 @@ pool:
   name: Self-Hosted
 
 stages:
-   # Ensure Terraform is Installed (Windows)
-  - task: PowerShell@2
-    displayName: "Ensure Terraform is Installed (Windows)"
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
-    inputs:
-      targetType: 'inline'
-      script: |
-        $terraform = Get-Command terraform -ErrorAction SilentlyContinue
-        if ($terraform -eq $null) {
-          Write-Host "Terraform not found. Installing..."
-          Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_windows_amd64.zip" -OutFile "terraform.zip"
-          Expand-Archive terraform.zip -DestinationPath "C:\terraform"
-          [System.Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\terraform", [System.EnvironmentVariableTarget]::Machine)
-          Write-Host "Terraform installed successfully."
-        } else {
-          Write-Host "Terraform is already installed."
-        }
+  - stage: Terraform_Deployment
+    displayName: "Terraform Deployment"
+    jobs:
+      - job: Terraform
+        steps:
+          # Ensure Terraform is Installed (Windows)
+          - task: PowerShell@2
+            displayName: "Ensure Terraform is Installed (Windows)"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              targetType: 'inline'
+              script: |
+                $terraform = Get-Command terraform -ErrorAction SilentlyContinue
+                if ($terraform -eq $null) {
+                  Write-Host "Terraform not found. Installing..."
+                  Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_windows_amd64.zip" -OutFile "terraform.zip"
+                  Expand-Archive terraform.zip -DestinationPath "C:\terraform"
+                  [System.Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\terraform", [System.EnvironmentVariableTarget]::Machine)
+                  Write-Host "Terraform installed successfully."
+                } else {
+                  Write-Host "Terraform is already installed."
+                }
 
-  # Debugging: List files in the directory
-  - script: |
-      dir /s /b
-    displayName: "List Files in Directory (Debug Step)"
+          # Debugging: List files in the directory
+          - script: |
+              dir /s /b
+            displayName: "List Files in Directory (Debug Step)"
 
-  # Azure CLI Login (Windows)
-  - task: PowerShell@2
-    displayName: "Azure CLI Login (Windows)"
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
-    inputs:
-      targetType: 'inline'
-      script: |
-        az login --service-principal -u $(ARM_CLIENT_ID) -p $(ARM_CLIENT_SECRET) --tenant $(ARM_TENANT_ID)
+          # Azure CLI Login (Windows)
+          - task: PowerShell@2
+            displayName: "Azure CLI Login (Windows)"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              targetType: 'inline'
+              script: |
+                az login --service-principal -u $(ARM_CLIENT_ID) -p $(ARM_CLIENT_SECRET) --tenant $(ARM_TENANT_ID)
 
-  # Initialize Terraform
-  - task: PowerShell@2
-    displayName: "Initialize Terraform"
-    inputs:
-      targetType: 'inline'
-      script: |
-        cd terraform
-        terraform init 
-  # Validate Terraform Configuration
-  - task: PowerShell@2
-    displayName: "Validate Terraform Code"
-    inputs:
-      targetType: 'inline'
-      script: |
-        cd terraform
-        terraform.exe validate
+          # Initialize Terraform
+          - task: PowerShell@2
+            displayName: "Initialize Terraform"
+            inputs:
+              targetType: 'inline'
+              script: |
+                cd terraform
+                terraform init 
 
-  # Plan Terraform Changes (Windows)
-  - task: PowerShell@2
-    displayName: "Plan Terraform Changes (Windows)"
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
-    inputs:
-      targetType: 'inline'
-      script: |
-        cd terraform
-        terraform.exe plan -out=tfplan  `
-          -var "ARM_CLIENT_ID=$(ARM_CLIENT_ID)" `
-          -var "ARM_CLIENT_SECRET=$(ARM_CLIENT_SECRET)" `
-          -var "ARM_SUBSCRIPTION_ID=$(ARM_SUBSCRIPTION_ID)" `
-          -var "ARM_TENANT_ID=$(ARM_TENANT_ID)"
+          # Validate Terraform Configuration
+          - task: PowerShell@2
+            displayName: "Validate Terraform Code"
+            inputs:
+              targetType: 'inline'
+              script: |
+                cd terraform
+                terraform.exe validate
 
-  # Apply Terraform Changes (Windows)
-  - task: PowerShell@2
-    displayName: "Apply Terraform Changes (Windows)"
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
-    inputs:
-      targetType: 'inline'
-      script: |
-        cd terraform
-        terraform.exe apply -auto-approve `
-          -var "ARM_CLIENT_ID=$(ARM_CLIENT_ID)" `
-          -var "ARM_CLIENT_SECRET=$(ARM_CLIENT_SECRET)" `
-          -var "ARM_SUBSCRIPTION_ID=$(ARM_SUBSCRIPTION_ID)" `
-          -var "ARM_TENANT_ID=$(ARM_TENANT_ID)"
+          # Plan Terraform Changes (Windows)
+          - task: PowerShell@2
+            displayName: "Plan Terraform Changes (Windows)"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              targetType: 'inline'
+              script: |
+                cd terraform
+                terraform.exe plan -out=tfplan `
+                  -var "ARM_CLIENT_ID=$(ARM_CLIENT_ID)" `
+                  -var "ARM_CLIENT_SECRET=$(ARM_CLIENT_SECRET)" `
+                  -var "ARM_SUBSCRIPTION_ID=$(ARM_SUBSCRIPTION_ID)" `
+                  -var "ARM_TENANT_ID=$(ARM_TENANT_ID)"
+
+          # Apply Terraform Changes (Windows)
+          - task: PowerShell@2
+            displayName: "Apply Terraform Changes (Windows)"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              targetType: 'inline'
+              script: |
+                cd terraform
+                terraform.exe apply -auto-approve `
+                  -var "ARM_CLIENT_ID=$(ARM_CLIENT_ID)" `
+                  -var "ARM_CLIENT_SECRET=$(ARM_CLIENT_SECRET)" `
+                  -var "ARM_SUBSCRIPTION_ID=$(ARM_SUBSCRIPTION_ID)" `
+                  -var "ARM_TENANT_ID=$(ARM_TENANT_ID)"
 
   - stage: Ansible_Provisioning
     displayName: "Configure VM using Ansible"
-    dependsOn: Terraform_Apply
+    dependsOn: Terraform_Deployment
     jobs:
       - job: Ansible
         steps:
