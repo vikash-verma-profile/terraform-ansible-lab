@@ -113,17 +113,9 @@ stages:
                 }
 
           # Run Ansible Playbook
-          - task: Bash@3
-            displayName: "Run Ansible Playbook"
+          - task: PowerShell@2
+            displayName: "Run Ansible Playbook in WSL"
             inputs:
-              targetType: "inline"
+              targetType: 'inline'
               script: |
-                if [[ "$AGENT_OS" == "Windows_NT" ]]; then
-                  echo "Running in Windows, using WSL for Ansible execution."
-                  wsl ansible-playbook -i "$(wsl terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --extra-vars "ansible_password=$(VM_PASSWORD)"
-                else
-                  echo "Running on Linux, executing Ansible directly."
-                  ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --extra-vars "ansible_password=$(VM_PASSWORD)"
-                fi
-            env:
-              ANSIBLE_HOST_KEY_CHECKING: "False"
+                wsl ansible-playbook -i "$(terraform output -raw vm_public_ip)," ansible/playbook.yml --user azureuser --private-key $(SSH_PRIVATE_KEY)
